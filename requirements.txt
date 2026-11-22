@@ -1,0 +1,8 @@
+# Runtime dependencies (what the app needs in production / inside the Docker image)
+fastapi>=0.115,<1                 # web framework
+uvicorn[standard]>=0.30,<1        # ASGI server that runs FastAPI
+psycopg[binary,pool]>=3.2,<4      # PostgreSQL driver (raw SQL) + connection pool
+pydantic-settings>=2.4,<3         # read config from environment variables / .env
+email-validator>=2.2,<3           # validates e-mail addresses (pydantic EmailStr)
+bcrypt>=4.2,<6                    # password hashing
+pyjwt>=2.9,<3                     # JSON Web Tokens for login

@@ -1,14 +1,7 @@
 -- 001_init.sql
 -- First schema of the Learning Resource Sharing app.
--- Plain SQL, applied once by our own small migration runner (no ORM, no Alembic).
-
-BEGIN;
-
--- Which migration files have already been applied.
-CREATE TABLE IF NOT EXISTS schema_migrations (
-    version     TEXT        PRIMARY KEY,               -- file name, e.g. '001_init'
-    applied_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
+-- Plain SQL. Applied by app/migrate.py, which wraps each file in a transaction
+-- and records it in schema_migrations, so this file contains only the schema itself.
 
 -- People who can log in and share resources.
 CREATE TABLE users (
@@ -41,7 +34,3 @@ CREATE TABLE resource_details (
     created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX resource_details_resource_id_idx ON resource_details (resource_id);
-
-INSERT INTO schema_migrations (version) VALUES ('001_init');
-
-COMMIT;
