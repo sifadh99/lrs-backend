@@ -1,4 +1,7 @@
 """API tests against a real PostgreSQL (lrs_test database)."""
+import pytest
+
+from tests.conftest import STRONG
 
 DOCKER = {"title": "Docker for beginners", "links": ["https://docs.docker.com", "https://youtu.be/abc"]}
 
@@ -18,7 +21,7 @@ def test_register_login_me(client, make_user):
 
 def test_duplicate_email_is_case_insensitive(client, make_user):
     make_user("a@x.com")
-    r = client.post("/auth/register", json={"email": "A@X.com", "name": "B", "password": "password123"})
+    r = client.post("/auth/register", json={"email": "A@X.com", "name": "B", "password": STRONG})
     assert r.status_code == 409
 
 
@@ -26,6 +29,37 @@ def test_wrong_password(client, make_user):
     make_user("a@x.com")
     r = client.post("/auth/login", json={"email": "a@x.com", "password": "nope-nope"})
     assert r.status_code == 401
+
+
+def test_login_without_account_is_rejected(client):
+    r = client.post("/auth/login", json={"email": "ghost@x.com", "password": STRONG})
+    assert r.status_code == 401
+    assert r.json()["detail"] == "wrong e-mail or password"    # same message as a wrong password
+
+
+@pytest.mark.parametrize("password", [
+    "Short1",              # < 10 characters
+    "onlyletterss",        # no digit
+    "1234567890",          # no letter (and common)
+    "Password123",         # common password (case-insensitive)
+    "masum-2024-x",        # contains the e-mail name "masum"
+])
+def test_weak_passwords_are_rejected(client, password):
+    r = client.post("/auth/register", json={"email": "masum@x.com", "name": "M", "password": password})
+    assert r.status_code == 422, password
+
+
+def test_brute_force_lockout(client, make_user):
+    make_user("victim@x.com")
+    for _ in range(5):
+        bad = client.post("/auth/login", json={"email": "victim@x.com", "password": "guess-12345"})
+        assert bad.status_code == 401
+    # 6th try is blocked even with the RIGHT password: the attacker cannot tell when they guessed it
+    locked = client.post("/auth/login", json={"email": "victim@x.com", "password": STRONG})
+    assert locked.status_code == 429
+    assert locked.headers["Retry-After"] == "900"
+    # other accounts are not affected
+    make_user("someone@x.com")
 
 
 def test_create_requires_login(client):
@@ -37,7 +71,8 @@ def test_create_and_list(client, make_user):
     created = client.post("/resources", json=DOCKER, headers=headers)
     assert created.status_code == 201
     body = created.json()
-    assert body["links"] == DOCKER["links"]            # same order as sent
+    assert [link["url"] for link in body["links"]] == DOCKER["links"]   # same order as sent
+    assert body["kind"] == "article" and body["category"] is None       # defaults
     assert body["owner"]["name"] == "Masum"
     assert body["updated_at"] is None
 
@@ -76,7 +111,7 @@ def test_only_owner_can_update_or_delete(client, make_user):
 
     updated = client.put(f"/resources/{rid}", json=new, headers=owner)
     assert updated.status_code == 200
-    assert updated.json()["links"] == ["https://kubernetes.io"]     # links replaced
+    assert [link["url"] for link in updated.json()["links"]] == ["https://kubernetes.io"]  # replaced
     assert updated.json()["updated_at"] is not None
 
     assert client.delete(f"/resources/{rid}", headers=owner).status_code == 204

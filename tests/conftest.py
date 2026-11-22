@@ -9,6 +9,8 @@ from urllib.parse import urlsplit, urlunsplit
 import psycopg
 import pytest
 
+STRONG = "Str0ng-pass-42"     # meets the password policy
+
 TEST_DB_URL = os.environ.get("LRS_TEST_DATABASE_URL", "postgresql://lrs:lrs@localhost:5432/lrs_test")
 os.environ["LRS_DATABASE_URL"] = TEST_DB_URL
 os.environ.setdefault("LRS_JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
@@ -41,7 +43,10 @@ def _schema():
 @pytest.fixture(autouse=True)
 def _clean_tables():
     with psycopg.connect(TEST_DB_URL, autocommit=True) as conn:
-        conn.execute("TRUNCATE users, resources, resource_details RESTART IDENTITY CASCADE")
+        conn.execute(
+            "TRUNCATE users, resources, resource_details, login_attempts, categories"
+            " RESTART IDENTITY CASCADE"
+        )
 
 
 @pytest.fixture(scope="session")
@@ -55,7 +60,7 @@ def client():
 @pytest.fixture
 def make_user(client):
     """Create a user and return the headers to call the API as that user."""
-    def _make(email: str, name: str = "Tester", password: str = "password123") -> dict:
+    def _make(email: str, name: str = "Tester", password: str = STRONG) -> dict:
         r = client.post("/auth/register", json={"email": email, "name": name, "password": password})
         assert r.status_code == 201, r.text
         token = client.post("/auth/login", json={"email": email, "password": password}).json()["access_token"]

@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.db import Conn, pool
-from app.routers import auth, resources
+from app.routers import auth, categories, resources
 
 settings = get_settings()
 
@@ -18,7 +18,7 @@ async def lifespan(app: FastAPI):
     pool.close()         # shutdown: close them cleanly
 
 
-app = FastAPI(title="Learning Resource Sharing API", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="GetCode API", version="0.1.0", lifespan=lifespan)
 
 # The React app runs on another origin (port 5173 locally), so the browser needs CORS.
 app.add_middleware(
@@ -30,6 +30,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(resources.router)
+app.include_router(categories.router)
 
 
 @app.get("/healthz", tags=["health"])
