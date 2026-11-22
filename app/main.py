@@ -1,12 +1,12 @@
 """FastAPI application entry point.  Run locally:  uvicorn app.main:app --reload"""
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Response, status
+from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
-from psycopg import Connection
 
 from app.config import get_settings
-from app.db import get_conn, pool
+from app.db import Conn, pool
+from app.routers import auth
 
 settings = get_settings()
 
@@ -28,6 +28,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
+
 
 @app.get("/healthz", tags=["health"])
 def healthz() -> dict:
@@ -36,7 +38,7 @@ def healthz() -> dict:
 
 
 @app.get("/readyz", tags=["health"])
-def readyz(response: Response, conn: Connection = Depends(get_conn)) -> dict:
+def readyz(response: Response, conn: Conn) -> dict:
     """Readiness: can we serve real traffic, i.e. does the database answer?"""
     try:
         conn.execute("SELECT 1")

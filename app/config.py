@@ -14,7 +14,8 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql://lrs:lrs@localhost:5432/lrs"
     # No default on purpose: the app refuses to start without a secret.
-    jwt_secret: str = Field(min_length=16)
+    # >= 32 bytes: the minimum for HS256 (RFC 7518 3.2). Generate with: openssl rand -hex 32
+    jwt_secret: str = Field(min_length=32)
     jwt_expire_minutes: int = 60
     cors_origins: list[str] = ["http://localhost:5173"]
     db_pool_min: int = 1

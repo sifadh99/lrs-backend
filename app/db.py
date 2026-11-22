@@ -1,6 +1,8 @@
 """PostgreSQL access: one connection pool for the whole app, raw SQL only."""
 from collections.abc import Iterator
+from typing import Annotated
 
+from fastapi import Depends
 from psycopg import Connection
 from psycopg.rows import dict_row
 from psycopg_pool import ConnectionPool
@@ -28,3 +30,7 @@ def get_conn() -> Iterator[Connection]:
     """
     with pool.connection() as conn:
         yield conn
+
+
+# Use as a parameter type in routes:  def route(conn: Conn): ...
+Conn = Annotated[Connection, Depends(get_conn)]

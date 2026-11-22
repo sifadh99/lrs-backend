@@ -1,0 +1,16 @@
+# Tool settings for ruff (lint) and pytest. Dependencies stay in requirements*.txt.
+[tool.ruff]
+line-length = 110
+target-version = "py313"
+
+[tool.ruff.lint]
+# E/W: pycodestyle   F: pyflakes (real bugs)   I: import order   B: bugbear (likely bugs)
+# UP: modern syntax  S: bandit (security)
+select = ["E", "W", "F", "I", "B", "UP", "S"]
+ignore = ["S101"]          # allow assert in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S105", "S106"]   # tests use hard-coded fake passwords
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
