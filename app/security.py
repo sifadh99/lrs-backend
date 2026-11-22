@@ -58,14 +58,29 @@ def get_current_user(creds: BearerCreds, conn: Conn) -> dict:
     except (jwt.InvalidTokenError, KeyError, ValueError) as e:
         raise _unauthorized("invalid token") from e
 
-    # The token is valid, but the account may have been deleted since it was issued.
+    # The token is valid, but the account may have been deleted or blocked since it was
+    # issued. Reading the user on every request makes a block (or a lost admin role)
+    # count from the very next request, not only when the token expires.
     user = conn.execute(
-        "SELECT id, email, name, created_at FROM users WHERE id = %s", (user_id,)
+        "SELECT id, email, name, role, created_at, disabled_at FROM users WHERE id = %s",
+        (user_id,),
     ).fetchone()
     if user is None:
         raise _unauthorized("user no longer exists")
+    if user["disabled_at"] is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "this account is blocked")
     return user
 
 
 # Use as a parameter type in protected routes:  def route(user: CurrentUser): ...
 CurrentUser = Annotated[dict, Depends(get_current_user)]
+
+
+def require_admin(user: CurrentUser) -> dict:
+    """401 if not logged in (from get_current_user), 403 if logged in but not an admin."""
+    if user["role"] != "admin":
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "admins only")
+    return user
+
+
+AdminUser = Annotated[dict, Depends(require_admin)]

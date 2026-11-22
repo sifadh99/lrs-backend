@@ -54,24 +54,25 @@ def test_seed_is_idempotent(seeded):
     assert again["new_resources"] == 0
 
 
-def test_category_tree(client, seeded):
-    groups = client.get("/categories").json()
+def test_category_tree(client, seeded, reader):
+    groups = client.get("/categories", headers=reader).json()
     assert [g["slug"] for g in groups] == ["network"]
     net = groups[0]
     assert [t["slug"] for t in net["topics"]] == ["ccna"]
     assert net["resource_count"] == 1 and net["total_count"] == 2
 
 
-def test_filter_by_category_and_thumbnail(client, seeded):
-    basics = client.get("/resources?category=network").json()
+def test_filter_by_category_and_thumbnail(client, seeded, reader):
+    basics = client.get("/resources?category=network", headers=reader).json()
     assert [r["title"] for r in basics] == ["Subnetting"]
     link = basics[0]["links"][0]
     assert link["label"] == "Subnet"
     assert link["thumbnail_url"] == f"https://i.ytimg.com/vi/{VID}/hqdefault.jpg"
 
-    assert [r["title"] for r in client.get("/resources?category=ccna&kind=tool").json()] == ["Packet Tracer"]
-    assert client.get("/resources?category=ccna&kind=video").json() == []
-    assert client.get("/resources?category=nope").status_code == 404
+    tools = client.get("/resources?category=ccna&kind=tool", headers=reader).json()
+    assert [r["title"] for r in tools] == ["Packet Tracer"]
+    assert client.get("/resources?category=ccna&kind=video", headers=reader).json() == []
+    assert client.get("/resources?category=nope", headers=reader).status_code == 404
 
 
 def test_share_into_category(client, make_user, seeded):

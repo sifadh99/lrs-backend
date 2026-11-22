@@ -1,7 +1,7 @@
 """Create, read, update and delete shared resources. Raw SQL only."""
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from psycopg import Connection
 from pydantic import TypeAdapter
 
@@ -9,9 +9,11 @@ from app import cache
 from app.db import Conn
 from app.media import thumbnail_for
 from app.schemas import Kind, ResourceIn, ResourceOut, Slug
-from app.security import CurrentUser
+from app.security import CurrentUser, get_current_user
 
-router = APIRouter(prefix="/resources", tags=["resources"])
+# Members-only: reading needs a login too, not just writing. FastAPI runs a dependency
+# once per request, so routes that also take `user: CurrentUser` do not query twice.
+router = APIRouter(prefix="/resources", tags=["resources"], dependencies=[Depends(get_current_user)])
 
 # One query returns resources WITH their links, owner and category (no N+1 queries).
 # {where} is only ever one of the fixed strings below, never user input;

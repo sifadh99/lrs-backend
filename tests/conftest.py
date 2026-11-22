@@ -70,3 +70,18 @@ def make_user(client):
         token = client.post("/auth/login", json={"email": email, "password": password}).json()["access_token"]
         return {"Authorization": f"Bearer {token}"}
     return _make
+
+
+@pytest.fixture
+def reader(make_user):
+    """Headers of an ordinary logged-in member: the site is members-only, even for reading."""
+    return make_user("reader@x.com", "Reader")
+
+
+@pytest.fixture
+def admin(make_user):
+    """Headers of an admin. Made the only allowed way: the server-side CLI."""
+    from app.admin import main as admin_cli
+    headers = make_user("boss@x.com", "Boss")
+    assert admin_cli(["promote", "boss@x.com"]) == 0
+    return headers

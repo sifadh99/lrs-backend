@@ -30,7 +30,7 @@ def register(body: UserCreate, conn: Conn) -> dict:
             """
             INSERT INTO users (email, name, password_hash)
             VALUES (%s, %s, %s)
-            RETURNING id, email, name, created_at
+            RETURNING id, email, name, role, created_at
             """,
             (body.email, body.name, hash_password(body.password)),
         ).fetchone()
@@ -84,7 +84,8 @@ def login(body: UserLogin, request: Request, conn: Conn) -> dict:
         )
 
     user = conn.execute(
-        "SELECT id, password_hash FROM users WHERE lower(email) = lower(%s)", (body.email,)
+        "SELECT id, password_hash, disabled_at FROM users WHERE lower(email) = lower(%s)",
+        (body.email,),
     ).fetchone()
     # Always run bcrypt once, even for unknown e-mails (same response time),
     # and give the same message for "no such user" and "wrong password".
@@ -92,6 +93,10 @@ def login(body: UserLogin, request: Request, conn: Conn) -> dict:
     _record(conn, body.email, ip, bool(user and ok))
     if not (user and ok):
         raise HTTPException(status.HTTP_401_UNAUTHORIZED, "wrong e-mail or password")
+    # Checked only AFTER the password: someone guessing passwords must not learn
+    # which accounts exist or are blocked.
+    if user["disabled_at"] is not None:
+        raise HTTPException(status.HTTP_403_FORBIDDEN, "this account is blocked")
 
     # housekeeping: old attempts are not needed any more
     conn.execute("DELETE FROM login_attempts WHERE at < now() - interval '1 day'")

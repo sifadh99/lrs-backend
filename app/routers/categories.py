@@ -1,12 +1,14 @@
 """The category tree: groups (Network, DevOps, ...) with their topics (CCNA, CKA, ...)."""
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 from pydantic import TypeAdapter
 
 from app import cache
 from app.db import Conn
 from app.schemas import CategoryGroup
+from app.security import get_current_user
 
-router = APIRouter(prefix="/categories", tags=["categories"])
+# Members-only site: every route here needs a logged-in, non-blocked user.
+router = APIRouter(prefix="/categories", tags=["categories"], dependencies=[Depends(get_current_user)])
 _TREE = TypeAdapter(list[CategoryGroup])     # validates + serializes the tree to JSON bytes
 
 

@@ -81,7 +81,7 @@ def test_create_requires_login(client):
     assert client.post("/resources", json=DOCKER).status_code == 401
 
 
-def test_create_and_list(client, make_user):
+def test_create_and_list(client, make_user, reader):
     headers = make_user("masum@x.com", "Masum")
     created = client.post("/resources", json=DOCKER, headers=headers)
     assert created.status_code == 201
@@ -91,16 +91,17 @@ def test_create_and_list(client, make_user):
     assert body["owner"]["name"] == "Masum"
     assert body["updated_at"] is None
 
-    listed = client.get("/resources").json()            # public, no token needed
+    listed = client.get("/resources", headers=reader).json()            # members only: needs a token
     assert [r["id"] for r in listed] == [body["id"]]
 
 
-def test_list_is_newest_first_and_paginated(client, make_user):
+def test_list_is_newest_first_and_paginated(client, make_user, reader):
     headers = make_user("a@x.com")
     ids = [client.post("/resources", json={**DOCKER, "title": f"R{i}"}, headers=headers).json()["id"]
            for i in range(3)]
-    assert [r["id"] for r in client.get("/resources").json()] == ids[::-1]
-    assert [r["id"] for r in client.get("/resources?limit=2&offset=1").json()] == ids[::-1][1:3]
+    assert [r["id"] for r in client.get("/resources", headers=reader).json()] == ids[::-1]
+    page = client.get("/resources?limit=2&offset=1", headers=reader).json()
+    assert [r["id"] for r in page] == ids[::-1][1:3]
 
 
 def test_validation(client, make_user):
@@ -115,7 +116,7 @@ def test_validation(client, make_user):
         assert client.post("/resources", json=body, headers=headers).status_code == 422, body
 
 
-def test_only_owner_can_update_or_delete(client, make_user):
+def test_only_owner_can_update_or_delete(client, make_user, reader):
     owner = make_user("owner@x.com")
     other = make_user("other@x.com")
     rid = client.post("/resources", json=DOCKER, headers=owner).json()["id"]
@@ -130,10 +131,10 @@ def test_only_owner_can_update_or_delete(client, make_user):
     assert updated.json()["updated_at"] is not None
 
     assert client.delete(f"/resources/{rid}", headers=owner).status_code == 204
-    assert client.get(f"/resources/{rid}").status_code == 404
+    assert client.get(f"/resources/{rid}", headers=reader).status_code == 404
 
 
-def test_missing_resource(client, make_user):
+def test_missing_resource(client, make_user, reader):
     headers = make_user("a@x.com")
-    assert client.get("/resources/999").status_code == 404
+    assert client.get("/resources/999", headers=reader).status_code == 404
     assert client.put("/resources/999", json=DOCKER, headers=headers).status_code == 404

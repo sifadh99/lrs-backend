@@ -58,6 +58,7 @@ class UserOut(BaseModel):          # what we send back: never the password hash
     id: int
     email: EmailStr
     name: str
+    role: Literal["user", "admin"]   # the UI shows the admin link only for admins
     created_at: datetime
 
 
