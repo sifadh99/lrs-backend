@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import cache
 from app.config import get_settings
-from app.db import Conn, pool
+from app.db import pool
 from app.routers import auth, categories, resources
 
 settings = get_settings()
@@ -41,14 +41,17 @@ def healthz() -> dict:
 
 
 @app.get("/readyz", tags=["health"])
-def readyz(response: Response, conn: Conn) -> dict:
+def readyz(response: Response) -> dict:
     """Readiness: can we serve real traffic, i.e. does the database answer?
 
     The cache is reported but never makes us "not ready": without Redis we are slower,
     not broken, and Kubernetes must not pull every pod out of service because of it.
     """
+    # Borrow the connection INSIDE the try, with a short timeout. Through the Conn dependency
+    # an empty pool would wait 30 s and then answer 500 instead of a quick 503.
     try:
-        conn.execute("SELECT 1")
+        with pool.connection(timeout=2) as conn:
+            conn.execute("SELECT 1")
         return {"status": "ready", "cache": cache.status()}
     except Exception:  # noqa: BLE001 - any DB error means "not ready"
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE

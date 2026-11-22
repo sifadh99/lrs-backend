@@ -11,6 +11,21 @@ def test_health(client):
     assert client.get("/readyz").status_code == 200
 
 
+def test_readyz_is_503_when_the_pool_has_no_connection(client, monkeypatch):
+    # what happens when PostgreSQL is down and the pool cannot open a connection
+    from psycopg_pool import PoolTimeout
+
+    from app import main
+
+    def no_connection(*args, **kwargs):
+        raise PoolTimeout("couldn't get a connection")
+
+    monkeypatch.setattr(main.pool, "connection", no_connection)
+    r = client.get("/readyz")
+    assert r.status_code == 503 and r.json() == {"status": "database unavailable"}
+    assert client.get("/healthz").status_code == 200        # liveness does not care
+
+
 def test_register_login_me(client, make_user):
     headers = make_user("Masum@x.com", "Masum")
     me = client.get("/auth/me", headers=headers)
