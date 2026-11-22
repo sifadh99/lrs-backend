@@ -1,6 +1,7 @@
 """Request / response shapes. Pydantic validates every request against these
 before our code runs, and FastAPI uses them to build the /docs page."""
 from datetime import datetime
+from typing import Annotated
 
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
@@ -45,3 +46,36 @@ class Token(BaseModel):
     access_token: str
     token_type: str = "bearer"      # noqa: S105 - the token *type* name, not a secret
     expires_in: int                 # seconds
+
+
+# ---------- resources ----------
+# Same rule as the CHECK constraint in the database: must start with http:// or https://
+Link = Annotated[str, Field(pattern=r"(?i)^https?://\S+$", max_length=2048)]
+
+
+class ResourceIn(BaseModel):
+    """Body for creating or replacing a resource."""
+    title: str = Field(min_length=1, max_length=200)
+    links: list[Link] = Field(min_length=1, max_length=10)
+
+    @field_validator("title")
+    @classmethod
+    def strip_title(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("title must not be blank")
+        return v
+
+
+class Owner(BaseModel):
+    id: int
+    name: str
+
+
+class ResourceOut(BaseModel):
+    id: int
+    title: str
+    links: list[str]
+    owner: Owner
+    created_at: datetime
+    updated_at: datetime | None

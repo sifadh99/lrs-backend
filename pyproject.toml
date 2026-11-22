@@ -10,7 +10,7 @@ select = ["E", "W", "F", "I", "B", "UP", "S"]
 ignore = ["S101"]          # allow assert in tests
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S105", "S106"]   # tests use hard-coded fake passwords
+"tests/**" = ["S105", "S106", "S107"]   # tests use hard-coded fake passwords
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
