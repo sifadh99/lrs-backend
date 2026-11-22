@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
+from app import cache
 from app.config import get_settings
 from app.db import Conn, pool
 from app.routers import auth, categories, resources
@@ -41,10 +42,14 @@ def healthz() -> dict:
 
 @app.get("/readyz", tags=["health"])
 def readyz(response: Response, conn: Conn) -> dict:
-    """Readiness: can we serve real traffic, i.e. does the database answer?"""
+    """Readiness: can we serve real traffic, i.e. does the database answer?
+
+    The cache is reported but never makes us "not ready": without Redis we are slower,
+    not broken, and Kubernetes must not pull every pod out of service because of it.
+    """
     try:
         conn.execute("SELECT 1")
-        return {"status": "ready"}
+        return {"status": "ready", "cache": cache.status()}
     except Exception:  # noqa: BLE001 - any DB error means "not ready"
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return {"status": "database unavailable"}

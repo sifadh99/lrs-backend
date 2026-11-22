@@ -3,7 +3,9 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from psycopg import Connection
+from pydantic import TypeAdapter
 
+from app import cache
 from app.db import Conn
 from app.media import thumbnail_for
 from app.schemas import Kind, ResourceIn, ResourceOut, Slug
@@ -39,6 +41,18 @@ WHERE r.id IN (
     ORDER BY created_at DESC, id DESC
     LIMIT %(limit)s OFFSET %(offset)s)""")
 _ONE_SQL = _SELECT.format(where="WHERE r.id = %(id)s")
+_LIST = TypeAdapter(list[ResourceOut])      # validates + serializes a list to JSON bytes
+
+
+def _commit_and_invalidate(conn: Connection) -> None:
+    """Commit FIRST, then make the cache stale.
+
+    The other way round, a reader could slip in between, read the old (not yet committed)
+    rows from PostgreSQL and put them back into the cache under the new version.
+    get_conn() would commit anyway when the request ends; committing earlier is harmless.
+    """
+    conn.commit()
+    cache.invalidate()
 
 
 def _fetch_one(conn: Connection, resource_id: int) -> dict:
@@ -90,12 +104,17 @@ def list_resources(
     kind: Kind | None = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 20,
     offset: Annotated[int, Query(ge=0)] = 0,
-) -> list[dict]:
-    params = {
-        "category_id": _category_id(conn, category, status.HTTP_404_NOT_FOUND),
-        "kind": kind, "limit": limit, "offset": offset,
-    }
-    return conn.execute(_LIST_SQL, params).fetchall()
+) -> Response:
+    def build() -> bytes:
+        # the unknown-category 404 is raised in here, so an error is never cached
+        params = {
+            "category_id": _category_id(conn, category, status.HTTP_404_NOT_FOUND),
+            "kind": kind, "limit": limit, "offset": offset,
+        }
+        return _LIST.dump_json(_LIST.validate_python(conn.execute(_LIST_SQL, params).fetchall()))
+
+    # every query parameter is part of the key: ?category=ccna and ?category=cka differ
+    return cache.cached_json(("resources", category or "-", kind or "-", limit, offset), build)
 
 
 @router.get("/{resource_id}", response_model=ResourceOut)
@@ -113,7 +132,9 @@ def create_resource(body: ResourceIn, user: CurrentUser, conn: Conn) -> dict:
         (body.title, user["id"], category_id, body.kind, body.description),
     ).fetchone()["id"]
     _insert_links(conn, new_id, body.links)
-    return _fetch_one(conn, new_id)
+    created = _fetch_one(conn, new_id)
+    _commit_and_invalidate(conn)
+    return created
 
 
 @router.put("/{resource_id}", response_model=ResourceOut)
@@ -128,11 +149,14 @@ def update_resource(resource_id: int, body: ResourceIn, user: CurrentUser, conn:
     # PUT replaces the whole resource, so the links are replaced too.
     conn.execute("DELETE FROM resource_details WHERE resource_id = %s", (resource_id,))
     _insert_links(conn, resource_id, body.links)
-    return _fetch_one(conn, resource_id)
+    updated = _fetch_one(conn, resource_id)
+    _commit_and_invalidate(conn)
+    return updated
 
 
 @router.delete("/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resource(resource_id: int, user: CurrentUser, conn: Conn) -> Response:
     _lock_owned(conn, resource_id, user["id"])
     conn.execute("DELETE FROM resources WHERE id = %s", (resource_id,))   # links go by CASCADE
+    _commit_and_invalidate(conn)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

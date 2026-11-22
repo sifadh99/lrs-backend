@@ -14,6 +14,8 @@ STRONG = "Str0ng-pass-42"     # meets the password policy
 TEST_DB_URL = os.environ.get("LRS_TEST_DATABASE_URL", "postgresql://lrs:lrs@localhost:5432/lrs_test")
 os.environ["LRS_DATABASE_URL"] = TEST_DB_URL
 os.environ.setdefault("LRS_JWT_SECRET", "test-secret-that-is-at-least-32-bytes-long")
+# Redis logical DB 15: tests never touch the dev cache in DB 0
+os.environ.setdefault("LRS_REDIS_URL", "redis://localhost:6379/15")
 
 
 def _create_test_database() -> None:
@@ -31,6 +33,7 @@ _create_test_database()
 
 from fastapi.testclient import TestClient  # noqa: E402  (must come after the env setup)
 
+from app import cache  # noqa: E402
 from app.main import app  # noqa: E402
 from app.migrate import migrate  # noqa: E402
 
@@ -47,6 +50,7 @@ def _clean_tables():
             "TRUNCATE users, resources, resource_details, login_attempts, categories"
             " RESTART IDENTITY CASCADE"
         )
+    cache.invalidate()     # the tables are empty again, so no cached answer may survive
 
 
 @pytest.fixture(scope="session")

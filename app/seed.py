@@ -13,6 +13,7 @@ import bcrypt
 import psycopg
 from psycopg.rows import dict_row
 
+from app import cache
 from app.config import get_settings
 from app.media import thumbnail_for
 
@@ -93,6 +94,8 @@ def seed(catalog_path: Path = CATALOG) -> dict:
                 for res in t.get("resources", []):
                     stats["new_resources"] += _upsert_resource(conn, curator, tid, res)
                     stats["resources"] += 1
+    # the with-block has committed by now; the API's cached copies are out of date
+    cache.invalidate()
     return stats
 
 

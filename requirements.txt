@@ -6,3 +6,4 @@ pydantic-settings>=2.4,<3         # read config from environment variables / .en
 email-validator>=2.2,<3           # validates e-mail addresses (pydantic EmailStr)
 bcrypt>=4.2,<6                    # password hashing
 pyjwt>=2.9,<3                     # JSON Web Tokens for login
+redis>=5.2,<8                     # Redis client (redis-py) for the cache

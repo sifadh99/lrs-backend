@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173"]
     db_pool_min: int = 1
     db_pool_max: int = 10
+    # Cache. Empty string = no cache at all (the app works the same, only slower).
+    redis_url: str = "redis://localhost:6379/0"
+    cache_ttl_seconds: int = 300        # safety net: even a missed invalidation heals in 5 min
 
 
 @lru_cache
