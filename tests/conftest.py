@@ -47,7 +47,7 @@ def _schema():
 def _clean_tables():
     with psycopg.connect(TEST_DB_URL, autocommit=True) as conn:
         conn.execute(
-            "TRUNCATE users, resources, resource_details, login_attempts, categories"
+            "TRUNCATE users, resources, resource_details, login_attempts, categories, admin_audit"
             " RESTART IDENTITY CASCADE"
         )
     cache.invalidate()     # the tables are empty again, so no cached answer may survive

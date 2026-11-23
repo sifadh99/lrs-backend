@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from psycopg import Connection
 from pydantic import TypeAdapter
 
-from app import cache
+from app import audit, cache
 from app.db import Conn
 from app.media import thumbnail_for
 from app.schemas import Kind, ResourceIn, ResourceOut, Slug
@@ -73,19 +73,23 @@ def _category_id(conn: Connection, slug: str | None, error: int) -> int | None:
     return row["id"]
 
 
-def _lock_owned(conn: Connection, resource_id: int, user_id: int) -> None:
-    """404 if the resource does not exist, 403 if it belongs to someone else.
+def _lock_owned(conn: Connection, resource_id: int, user: dict, action: str) -> None:
+    """404 if the resource does not exist; 403 unless the user owns it or is an admin.
 
     FOR UPDATE locks the row until the transaction ends, so two edits of the
-    same resource cannot interleave.
+    same resource cannot interleave. An admin changing someone else's resource
+    is written to the audit log.
     """
     row = conn.execute(
-        "SELECT user_id FROM resources WHERE id = %s FOR UPDATE", (resource_id,)
+        "SELECT user_id, title FROM resources WHERE id = %s FOR UPDATE", (resource_id,)
     ).fetchone()
     if row is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "resource not found")
-    if row["user_id"] != user_id:
+    if row["user_id"] == user["id"]:
+        return
+    if user["role"] != "admin":
         raise HTTPException(status.HTTP_403_FORBIDDEN, "only the owner can change this resource")
+    audit.record(conn, user, action, f"resource:{resource_id}", title=row["title"], owner_id=row["user_id"])
 
 
 def _insert_links(conn: Connection, resource_id: int, links: list[str]) -> None:
@@ -141,7 +145,7 @@ def create_resource(body: ResourceIn, user: CurrentUser, conn: Conn) -> dict:
 
 @router.put("/{resource_id}", response_model=ResourceOut)
 def update_resource(resource_id: int, body: ResourceIn, user: CurrentUser, conn: Conn) -> dict:
-    _lock_owned(conn, resource_id, user["id"])
+    _lock_owned(conn, resource_id, user, "resource.update")
     category_id = _category_id(conn, body.category, status.HTTP_422_UNPROCESSABLE_CONTENT)
     conn.execute(
         "UPDATE resources SET title = %s, kind = %s, description = %s, category_id = %s,"
@@ -158,7 +162,7 @@ def update_resource(resource_id: int, body: ResourceIn, user: CurrentUser, conn:
 
 @router.delete("/{resource_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_resource(resource_id: int, user: CurrentUser, conn: Conn) -> Response:
-    _lock_owned(conn, resource_id, user["id"])
+    _lock_owned(conn, resource_id, user, "resource.delete")
     conn.execute("DELETE FROM resources WHERE id = %s", (resource_id,))   # links go by CASCADE
     _commit_and_invalidate(conn)
     return Response(status_code=status.HTTP_204_NO_CONTENT)

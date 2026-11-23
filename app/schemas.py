@@ -139,3 +139,62 @@ class CategoryTopic(BaseModel):
 class CategoryGroup(CategoryTopic):
     total_count: int                   # the group's own resources + all its topics
     topics: list[CategoryTopic]
+
+
+# ---------- admin ----------
+Role = Literal["user", "admin"]
+
+
+class AdminUserOut(BaseModel):
+    id: int
+    email: EmailStr
+    name: str
+    role: Role
+    created_at: datetime
+    disabled_at: datetime | None       # set = blocked since then
+    resource_count: int
+
+
+class AdminUserPatch(BaseModel):
+    """Change role and/or block state; a field left out stays as it is."""
+    model_config = {"extra": "forbid"}  # a typo like "rol" is a 422, not silently ignored
+    role: Role | None = None
+    blocked: bool | None = None
+
+    @model_validator(mode="after")
+    def something_to_do(self) -> "AdminUserPatch":
+        if self.role is None and self.blocked is None:
+            raise ValueError("give role and/or blocked")
+        return self
+
+
+class AdminStats(BaseModel):
+    users: int
+    admins: int
+    blocked: int
+    resources: int
+    users_today: int                   # since midnight UTC
+    resources_today: int
+    failed_logins_24h: int
+    cache: str                         # up / down / disabled
+
+
+class LoginAttemptOut(BaseModel):
+    email: str
+    ip: str | None
+    at: datetime
+
+
+class SecurityOut(BaseModel):
+    failed: list[LoginAttemptOut]      # newest first
+    locked_emails: list[str]           # at the per-e-mail limit right now
+    locked_ips: list[str]              # at the per-IP limit right now
+
+
+class AuditOut(BaseModel):
+    id: int
+    admin_email: str
+    action: str
+    target: str
+    details: dict
+    at: datetime

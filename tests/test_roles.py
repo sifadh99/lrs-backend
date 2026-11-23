@@ -50,3 +50,16 @@ def test_blocked_user_is_locked_out_at_once(client, reader):
 
     assert admin_cli(["unblock", "reader@x.com"]) == 0
     assert client.get("/resources", headers=reader).status_code == 200
+
+
+def test_cli_set_password(client, reader, monkeypatch):
+    import app.admin as cli
+    # getpass asks twice (password + confirmation); feed it answers instead of a keyboard
+    answers = iter(["short1", "short1", "N3w-strong-pass", "N3w-strong-pass"])
+    monkeypatch.setattr(cli.getpass, "getpass", lambda prompt="": next(answers))
+
+    assert cli.main(["set-password", "reader@x.com"]) == 1          # too weak: refused
+    assert cli.main(["set-password", "reader@x.com"]) == 0
+    login = {"email": "reader@x.com", "password": "N3w-strong-pass"}
+    assert client.post("/auth/login", json=login).status_code == 200
+    assert client.post("/auth/login", json={**login, "password": STRONG}).status_code == 401
